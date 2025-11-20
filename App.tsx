@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { View, FoodItem, UserGoals, DayLog } from './types';
 import BottomNav from './components/BottomNav';
@@ -14,8 +15,8 @@ import {
   getUserGoals, 
   updateUserGoals, 
   addFoodItemToDb, 
-  deleteFoodItemFromDb, 
-  subscribeToTodaysLogs 
+  deleteFoodItemFromDb,
+  getFoodHistoryFromDb
 } from './services/db';
 import { Loader2 } from 'lucide-react';
 
@@ -35,7 +36,9 @@ const App: React.FC = () => {
   // Data States
   const [todayLog, setTodayLog] = useState<FoodItem[]>([]);
   const [goals, setGoals] = useState<UserGoals>(DEFAULT_GOALS);
-  const [history] = useState<DayLog[]>([]); // History logic needs full DB implementation, keeping empty for now or need new query
+  const [history, setHistory] = useState<DayLog[]>([]);
+  const [historyLoading, setHistoryLoading] = useState(false);
+  const [historyError, setHistoryError] = useState<string | null>(null);
 
   // 1. Handle Authentication
   useEffect(() => {
@@ -46,7 +49,62 @@ const App: React.FC = () => {
     return () => unsubscribe();
   }, []);
 
-  // 2. Handle Data Subscription (Only when user is logged in)
+  // Helper to process flat history data into DayLog[]
+  const processHistoryData = (data: FoodItem[]): DayLog[] => {
+    if (!Array.isArray(data)) return [];
+    
+    const grouped: Record<string, FoodItem[]> = {};
+    
+    data.forEach((item) => {
+       const dateKey = new Date(item.timestamp).toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' });
+       if (!grouped[dateKey]) grouped[dateKey] = [];
+       grouped[dateKey].push(item);
+    });
+
+    // Convert to DayLog
+    return Object.keys(grouped).map(date => {
+        const items = grouped[date];
+        // Sort items within day by time descending
+        items.sort((a, b) => b.timestamp - a.timestamp);
+
+        const totals = items.reduce((acc, cur) => ({
+            calories: acc.calories + cur.calories,
+            protein: acc.protein + cur.protein,
+            carbs: acc.carbs + cur.carbs,
+            fat: acc.fat + cur.fat
+        }), { calories: 0, protein: 0, carbs: 0, fat: 0 });
+        
+        return { date, items, totals };
+    }).sort((a, b) => {
+         // Sort days by the timestamp of their most recent item
+         const timeA = a.items[0]?.timestamp || 0;
+         const timeB = b.items[0]?.timestamp || 0;
+         return timeB - timeA;
+    });
+  };
+
+  const fetchHistory = async (uid: string) => {
+    console.log("Fetching history from Firestore...");
+    setHistoryLoading(true);
+    setHistoryError(null);
+    try {
+      const items = await getFoodHistoryFromDb(uid);
+      const processedHistory = processHistoryData(items);
+      setHistory(processedHistory);
+
+      // Extract "Today's" data from history for the Dashboard
+      const todayStr = new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' });
+      const todayEntry = processedHistory.find(day => day.date === todayStr);
+      setTodayLog(todayEntry ? todayEntry.items : []);
+    } catch (e) {
+      console.error("History fetch error:", e);
+      setHistoryError("Failed to load history from database.");
+    } finally {
+      setHistoryLoading(false);
+    }
+  };
+
+  // 2. Handle Data Fetching (Only when user is logged in)
   useEffect(() => {
     if (!user) return;
 
@@ -55,33 +113,39 @@ const App: React.FC = () => {
       if (fetchedGoals) {
         setGoals(fetchedGoals);
       } else {
-        // Initialize default goals for new user
-        updateUserGoals(user.uid, DEFAULT_GOALS);
+        // Initialize default goals for new user (or if DB fetch failed due to permissions)
+        updateUserGoals(user.uid, DEFAULT_GOALS).catch(err => console.warn("Init goals failed (offline/perms)", err));
       }
     });
 
-    // Subscribe to today's logs
-    const unsubscribeLogs = subscribeToTodaysLogs(user.uid, (items) => {
-      setTodayLog(items);
-    });
-
-    return () => unsubscribeLogs();
+    // Fetch History on load
+    fetchHistory(user.uid);
   }, [user]);
+
+  // 3. Fetch History when switching to History view
+  useEffect(() => {
+    if (currentView === View.HISTORY && user) {
+        fetchHistory(user.uid);
+    }
+  }, [currentView, user]);
 
   // Handlers
   const handleAddItems = async (newItems: FoodItem[]) => {
     if (!user) return;
-    // Optimistically update or wait for subscription? 
-    // Firestore subscription is fast, but we should add to DB here.
-    for (const item of newItems) {
-      await addFoodItemToDb(user.uid, item);
-    }
-    // Note: We don't manually setTodayLog here because the onSnapshot listener will do it for us.
+    
+    // Add to Firestore
+    // We await these sequentially to ensure order, or Promise.all for speed
+    await Promise.all(newItems.map(item => addFoodItemToDb(user.uid, item)));
+    
+    // Refresh history immediately
+    fetchHistory(user.uid);
   };
 
   const handleDeleteItem = async (id: string) => {
     if (!user) return;
     await deleteFoodItemFromDb(user.uid, id);
+    // Refresh history immediately
+    fetchHistory(user.uid);
   };
 
   const handleUpdateGoals = async (newGoals: UserGoals) => {
@@ -92,6 +156,10 @@ const App: React.FC = () => {
 
   // Navigation Handler
   const handleNavChange = (view: View) => {
+    // If clicking History while already on History, force a refresh
+    if (view === View.HISTORY && currentView === View.HISTORY && user) {
+         fetchHistory(user.uid);
+    }
     setCurrentView(view);
   };
 
@@ -114,11 +182,17 @@ const App: React.FC = () => {
       case View.DASHBOARD:
         return <Dashboard goals={goals} todayLog={todayLog} onDelete={handleDeleteItem} />;
       case View.HISTORY:
-        return <History history={history} />;
+        return (
+            <History 
+                history={history} 
+                isLoading={historyLoading} 
+                error={historyError} 
+                onRetry={() => fetchHistory(user.uid)} 
+            />
+        );
       case View.PROFILE:
         return <Profile goals={goals} setGoals={handleUpdateGoals} />;
       case View.SCANNER:
-        // Scanner overlay logic handled below
         return <Dashboard goals={goals} todayLog={todayLog} onDelete={handleDeleteItem} />; 
       default:
         return <Dashboard goals={goals} todayLog={todayLog} onDelete={handleDeleteItem} />;
@@ -139,7 +213,8 @@ const App: React.FC = () => {
           <Scanner 
             onAddItems={handleAddItems} 
             onClose={() => setCurrentView(View.DASHBOARD)}
-            n8nUrl={goals.n8nUrl} 
+            n8nUrl={goals.n8nUrl}
+            uid={user.uid} 
           />
         )}
 

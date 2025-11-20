@@ -1,84 +1,102 @@
+
 import { db } from '../firebase';
 import { 
   collection, 
   doc, 
-  setDoc, 
   getDoc, 
+  setDoc, 
   addDoc, 
-  query, 
-  where, 
-  onSnapshot, 
-  deleteDoc,
+  deleteDoc, 
+  getDocs,
+  query,
   orderBy,
-  Timestamp,
-  QuerySnapshot,
-  DocumentData
+  Timestamp 
 } from 'firebase/firestore';
 import { FoodItem, UserGoals } from '../types';
 
 const USERS_COLLECTION = 'users';
-const LOGS_COLLECTION = 'logs';
+const DAILY_ENTRIES_SUBCOLLECTION = 'dailyEntries';
 
 // --- Goals ---
 
 export const getUserGoals = async (userId: string): Promise<UserGoals | null> => {
-  const docRef = doc(db, USERS_COLLECTION, userId);
-  const docSnap = await getDoc(docRef);
-  if (docSnap.exists()) {
-    const data = docSnap.data();
-    return (data as any)?.goals as UserGoals;
+  try {
+    const docRef = doc(db, USERS_COLLECTION, userId);
+    const docSnap = await getDoc(docRef);
+    if (docSnap.exists()) {
+      const data = docSnap.data();
+      return (data as any)?.goals as UserGoals;
+    }
+    return null;
+  } catch (error) {
+    // Suppress permission errors silently or with warning to allow fallback to default goals
+    console.warn("DB Read Error (getUserGoals) - using defaults:", error);
+    return null;
   }
-  return null;
 };
 
 export const updateUserGoals = async (userId: string, goals: UserGoals) => {
-  const docRef = doc(db, USERS_COLLECTION, userId);
-  // Merge true to preserve other user data if any
-  await setDoc(docRef, { goals }, { merge: true });
+  try {
+    const docRef = doc(db, USERS_COLLECTION, userId);
+    await setDoc(docRef, { goals }, { merge: true });
+  } catch (error) {
+    console.warn("DB Write Error (updateUserGoals):", error);
+  }
 };
 
 // --- Logs ---
 
 export const addFoodItemToDb = async (userId: string, item: FoodItem) => {
-  const logsRef = collection(db, USERS_COLLECTION, userId, LOGS_COLLECTION);
-  // Ensure we save standard JS primitives
-  await addDoc(logsRef, {
-    ...item,
-    timestamp: Timestamp.fromMillis(item.timestamp) // Convert to Firestore Timestamp
-  });
+  try {
+    // Updated: Use subcollection path 'users/{userId}/dailyEntries' to match security rules
+    const logsRef = collection(db, USERS_COLLECTION, userId, DAILY_ENTRIES_SUBCOLLECTION);
+    
+    await addDoc(logsRef, {
+      ...item,
+      userId: userId, // Updated: Must use 'userId' to match 'request.resource.data.userId' in rules
+      timestamp: Timestamp.fromMillis(item.timestamp) 
+    });
+  } catch (error) {
+    console.warn("DB Write Error (addFoodItemToDb):", error);
+  }
 };
 
 export const deleteFoodItemFromDb = async (userId: string, itemId: string) => {
-  const docRef = doc(db, USERS_COLLECTION, userId, LOGS_COLLECTION, itemId);
-  await deleteDoc(docRef);
+  try {
+    // Updated: Use subcollection path to locate the correct document for deletion
+    const docRef = doc(db, USERS_COLLECTION, userId, DAILY_ENTRIES_SUBCOLLECTION, itemId);
+    await deleteDoc(docRef);
+  } catch (error) {
+    console.warn("DB Delete Error (deleteFoodItemFromDb):", error);
+  }
 };
 
-// Subscribe to logs for a specific day (or simply most recent for now)
-export const subscribeToTodaysLogs = (userId: string, callback: (items: FoodItem[]) => void) => {
-  const logsRef = collection(db, USERS_COLLECTION, userId, LOGS_COLLECTION);
-  
-  // Calculate start of today
-  const startOfDay = new Date();
-  startOfDay.setHours(0, 0, 0, 0);
-  const startTimestamp = Timestamp.fromDate(startOfDay);
+export const getFoodHistoryFromDb = async (userId: string): Promise<FoodItem[]> => {
+  try {
+    const logsRef = collection(db, USERS_COLLECTION, userId, DAILY_ENTRIES_SUBCOLLECTION);
+    // Order by timestamp descending (newest first)
+    const q = query(logsRef, orderBy('timestamp', 'desc'));
+    const querySnapshot = await getDocs(q);
 
-  const q = query(
-    logsRef,
-    where('timestamp', '>=', startTimestamp),
-    orderBy('timestamp', 'desc')
-  );
-
-  return onSnapshot(q, (snapshot: QuerySnapshot<DocumentData>) => {
-    const items: FoodItem[] = [];
-    snapshot.forEach((doc) => {
+    return querySnapshot.docs.map(doc => {
       const data = doc.data();
-      items.push({
-        ...data,
+      // Convert Firestore Timestamp back to milliseconds number
+      const ts = data.timestamp instanceof Timestamp ? data.timestamp.toMillis() : (data.timestamp || Date.now());
+      
+      return {
         id: doc.id,
-        // Convert Firestore Timestamp back to millis number for the app
-        timestamp: data.timestamp?.toMillis ? data.timestamp.toMillis() : Date.now()
-      } as FoodItem);
+        name: data.name || 'Unknown',
+        calories: Number(data.calories) || 0,
+        protein: Number(data.protein) || 0,
+        carbs: Number(data.carbs) || 0,
+        fat: Number(data.fat) || 0,
+        notes: data.notes || '',
+        imageUrl: data.imageUrl,
+        timestamp: ts
+      } as FoodItem;
     });
-    callback(items);
-  });
+  } catch (error) {
+    console.error("DB Read Error (getFoodHistoryFromDb):", error);
+    return [];
+  }
 };

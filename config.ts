@@ -12,4 +12,5 @@ export const FIREBASE_CONFIG = {
 };
 
 // Your N8N Webhook URL
-export const N8N_WEBHOOK_URL = "https://dk001.app.n8n.cloud/webhook-test/adc8abd2-8cf8-4da6-a692-b2229eb94566";
+export const N8N_WEBHOOK_URL = "https://dk001.app.n8n.cloud/webhook/adc8abd2-8cf8-4da6-a692-b2229eb94566";
+export const N8N_GET_HISTORY_URL = "https://dk001.app.n8n.cloud/webhook-test/dd25abcb-d60a-4135-b94f-1e2d5f283c7a";

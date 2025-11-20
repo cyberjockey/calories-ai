@@ -8,10 +8,11 @@ import { N8N_WEBHOOK_URL } from '../config';
 interface ScannerProps {
   onAddItems: (items: FoodItem[]) => void;
   onClose: () => void;
-  n8nUrl?: string; // Kept for interface compatibility
+  n8nUrl?: string; 
+  uid: string;
 }
 
-const Scanner: React.FC<ScannerProps> = ({ onAddItems, onClose }) => {
+const Scanner: React.FC<ScannerProps> = ({ onAddItems, onClose, n8nUrl, uid }) => {
   const [status, setStatus] = useState<Status>(Status.IDLE);
   const [imagePreview, setImagePreview] = useState<string | null>(null);
   const [imageBase64, setImageBase64] = useState<string | null>(null);
@@ -73,6 +74,7 @@ const Scanner: React.FC<ScannerProps> = ({ onAddItems, onClose }) => {
 
     // Send to N8N
     try {
+        const targetUrl = n8nUrl || N8N_WEBHOOK_URL;
         // Sending each item individually to n8n as requested
         for (const item of newItems) {
             // Smart format for notes: Don't repeat name if it's already in the notes
@@ -81,8 +83,9 @@ const Scanner: React.FC<ScannerProps> = ({ onAddItems, onClose }) => {
                 finalNotes = `${item.name} - ${finalNotes}`;
             }
 
-            // The requested JSON structure: {calories, protein, carbs, fat, notes}
+            // The requested JSON structure: {uid, calories, protein, carbs, fat, notes}
             const payload = {
+                uid: uid,
                 calories: item.calories,
                 protein: item.protein,
                 carbs: item.carbs,
@@ -90,7 +93,7 @@ const Scanner: React.FC<ScannerProps> = ({ onAddItems, onClose }) => {
                 notes: finalNotes
             };
             
-            fetch(N8N_WEBHOOK_URL, {
+            fetch(targetUrl, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(payload),

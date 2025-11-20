@@ -1,7 +1,9 @@
+
 import React from 'react';
 import { UserGoals } from '../types';
 import { LogOut } from 'lucide-react';
 import { auth } from '../firebase';
+import { signOut } from 'firebase/auth';
 
 interface ProfileProps {
   goals: UserGoals;
@@ -20,7 +22,7 @@ const Profile: React.FC<ProfileProps> = ({ goals, setGoals }) => {
   };
 
   const handleSignOut = () => {
-    auth.signOut();
+    signOut(auth);
   };
 
   return (
@@ -85,6 +87,19 @@ const Profile: React.FC<ProfileProps> = ({ goals, setGoals }) => {
                     />
                     <span className="block text-center text-xs text-slate-500 mt-1">grams</span>
                 </div>
+            </div>
+            
+             {/* N8N Webhook URL Config */}
+             <div className="bg-slate-800/50 p-6 rounded-2xl border border-slate-700 mt-4">
+                <label className="block text-slate-400 text-sm font-medium mb-2">N8N Webhook URL</label>
+                <input 
+                    type="text" 
+                    placeholder="https://..."
+                    value={goals.n8nUrl || ''}
+                    onChange={(e) => handleChange('n8nUrl', e.target.value)}
+                    className="w-full bg-slate-900 rounded-xl p-3 text-white border border-slate-700 outline-none focus:border-blue-500 text-sm"
+                />
+                <p className="text-xs text-slate-500 mt-2">Optional: Overrides the default webhook for data export.</p>
             </div>
         </div>
       </div>

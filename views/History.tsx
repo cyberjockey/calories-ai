@@ -1,18 +1,57 @@
+
 import React from 'react';
 import { DayLog } from '../types';
-import { Calendar } from 'lucide-react';
+import { Calendar, Loader2, RefreshCw, WifiOff } from 'lucide-react';
 
 interface HistoryProps {
   history: DayLog[];
+  isLoading: boolean;
+  error?: string | null;
+  onRetry?: () => void;
 }
 
-const History: React.FC<HistoryProps> = ({ history }) => {
-  // Simple charts can be complex, let's do a list summary for now
+const History: React.FC<HistoryProps> = ({ history, isLoading, error, onRetry }) => {
   return (
     <div className="w-full px-4 py-6 pb-24 animate-fade-in">
-      <h1 className="text-2xl font-bold text-white mb-6 pl-2">History</h1>
+      <div className="flex justify-between items-center mb-6 pl-2">
+        <h1 className="text-2xl font-bold text-white">History</h1>
+        {onRetry && !isLoading && (
+            <button onClick={onRetry} className="text-slate-400 hover:text-white p-2">
+                <RefreshCw size={18} />
+            </button>
+        )}
+      </div>
       
-      {history.length === 0 ? (
+      {isLoading ? (
+        <div className="flex flex-col items-center justify-center h-64 text-slate-500">
+          <Loader2 size={48} className="animate-spin text-blue-500 mb-4" />
+          <p>Fetching history...</p>
+        </div>
+      ) : error ? (
+        <div className="flex flex-col items-center justify-center h-auto text-slate-500 bg-slate-800/30 rounded-xl border border-red-500/20 p-6 text-center mx-2">
+          <WifiOff size={48} className="mb-4 text-red-400" />
+          <p className="text-red-300 font-medium mb-2">Connection Failed</p>
+          <p className="text-xs text-slate-400 mb-4">{error}</p>
+          
+          {error.includes('Test webhook') || error.includes('test') ? (
+             <div className="mb-4 bg-slate-800/80 p-3 rounded-lg">
+                 <p className="text-xs text-yellow-500">
+                    ⚠️ You are using a <strong>Test URL</strong>. 
+                    Make sure you pressed <strong>"Execute"</strong> in N8N before refreshing.
+                 </p>
+             </div>
+          ) : null}
+
+          {onRetry && (
+            <button 
+                onClick={onRetry}
+                className="px-4 py-2 bg-slate-700 hover:bg-slate-600 text-white text-sm rounded-lg transition-colors"
+            >
+                Try Again
+            </button>
+          )}
+        </div>
+      ) : history.length === 0 ? (
         <div className="flex flex-col items-center justify-center h-64 text-slate-500">
           <Calendar size={48} className="mb-4 opacity-20" />
           <p>No history available yet.</p>
