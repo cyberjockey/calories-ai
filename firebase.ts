@@ -10,7 +10,7 @@ const firebaseConfig = {
   projectId: process.env.FIREBASE_PROJECT_ID || "YOUR_PROJECT_ID",
   storageBucket: process.env.FIREBASE_STORAGE_BUCKET || "YOUR_PROJECT.appspot.com",
   messagingSenderId: process.env.FIREBASE_MESSAGING_SENDER_ID || "SENDER_ID",
-  appId: process.env.FIREBASE_APP_ID || "APP_ID"
+  appId: process.env.FIREBASE_APP_ID || "calories-ai-68330"
 };
 
 const app = initializeApp(firebaseConfig);

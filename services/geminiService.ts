@@ -42,7 +42,7 @@ export const analyzeFoodImage = async (base64Image: string, promptText?: string)
     ${promptText ? `Additional user context: "${promptText}"` : ''}
     
     Be precise with nutritional estimates. 
-    Return a structured JSON response where 'notes' contains a brief description of the item and portion.
+    Return a structured JSON response where 'notes' describes the portion size and preparation.
   `;
 
   try {
@@ -74,7 +74,7 @@ export const analyzeFoodImage = async (base64Image: string, promptText?: string)
                   protein: { type: Type.NUMBER, description: "Protein in grams" },
                   carbs: { type: Type.NUMBER, description: "Carbohydrates in grams" },
                   fat: { type: Type.NUMBER, description: "Fat in grams" },
-                  notes: { type: Type.STRING, description: "Brief notes about portion size or ingredients" },
+                  notes: { type: Type.STRING, description: "Portion size, preparation, and details" },
                   confidenceRating: { type: Type.NUMBER, description: "Confidence score 0-1" }
                 },
                 required: ["name", "calories", "protein", "carbs", "fat", "notes"]
@@ -100,11 +100,19 @@ export const analyzeFoodImage = async (base64Image: string, promptText?: string)
 export const analyzeFoodText = async (text: string): Promise<GeminiAnalysisResult> => {
     const model = "gemini-2.5-flash";
     
+    const prompt = `
+      Analyze the following food description: "${text}".
+      Identify the food items, estimate portion sizes if implied, and calculate nutritional content (Calories, Protein, Carbs, Fat).
+      
+      Be precise. Return a structured JSON response.
+      The 'notes' field should describe the portion size and preparation method.
+    `;
+
     try {
       const response = await ai.models.generateContent({
         model: model,
         contents: {
-          parts: [{ text: `Analyze this food description: "${text}". Estimate nutrition. Return JSON with notes.` }]
+          parts: [{ text: prompt }]
         },
         config: {
           responseMimeType: "application/json",

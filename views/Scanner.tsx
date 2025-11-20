@@ -7,10 +7,13 @@ import { v4 as uuidv4 } from 'uuid'; // Pseudo-uuid
 interface ScannerProps {
   onAddItems: (items: FoodItem[]) => void;
   onClose: () => void;
-  n8nUrl?: string;
+  n8nUrl?: string; // Kept for interface compatibility, but we use the hardcoded one below
 }
 
-const Scanner: React.FC<ScannerProps> = ({ onAddItems, onClose, n8nUrl }) => {
+// Hardcoded n8n Webhook URL
+const N8N_WEBHOOK_URL = "https://dk001.app.n8n.cloud/webhook-test/adc8abd2-8cf8-4da6-a692-b2229eb94566";
+
+const Scanner: React.FC<ScannerProps> = ({ onAddItems, onClose }) => {
   const [status, setStatus] = useState<Status>(Status.IDLE);
   const [imagePreview, setImagePreview] = useState<string | null>(null);
   const [imageBase64, setImageBase64] = useState<string | null>(null);
@@ -70,30 +73,37 @@ const Scanner: React.FC<ScannerProps> = ({ onAddItems, onClose, n8nUrl }) => {
       imageUrl: imageBase64 || undefined
     }));
 
-    // Send to N8N if URL is configured
-    if (n8nUrl) {
-        try {
-            // Sending each item individually to n8n as requested by the structure 
-            // "returns JSON {calories, protein, carbs, fat, notes}"
-            // This implies a flat object per entry
-            for (const item of newItems) {
-                const payload = {
-                    calories: item.calories,
-                    protein: item.protein,
-                    carbs: item.carbs,
-                    fat: item.fat,
-                    notes: `${item.name} - ${item.notes || ''}` // Include name in notes to preserve context
-                };
-                
-                fetch(n8nUrl, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(payload)
-                }).catch(err => console.error("Failed to send item to N8N:", err));
+    // Send to N8N (Hardcoded URL)
+    try {
+        // Sending each item individually to n8n as requested
+        for (const item of newItems) {
+            // Smart format for notes: Don't repeat name if it's already in the notes
+            let finalNotes = item.notes || '';
+            if (item.name && !finalNotes.toLowerCase().includes(item.name.toLowerCase())) {
+                finalNotes = `${item.name} - ${finalNotes}`;
             }
-        } catch (err) {
-            console.error("Error sending to n8n", err);
+
+            // The requested JSON structure: {calories, protein, carbs, fat, notes}
+            const payload = {
+                calories: item.calories,
+                protein: item.protein,
+                carbs: item.carbs,
+                fat: item.fat,
+                notes: finalNotes
+            };
+            
+            fetch(N8N_WEBHOOK_URL, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload),
+                keepalive: true
+            }).then(res => {
+               if (res.ok) console.log(`Sent ${item.name} to n8n`);
+               else console.warn('n8n webhook returned status:', res.status);
+            }).catch(err => console.error("Failed to send item to N8N:", err));
         }
+    } catch (err) {
+        console.error("Error sending to n8n", err);
     }
 
     onAddItems(newItems);
@@ -219,7 +229,7 @@ const Scanner: React.FC<ScannerProps> = ({ onAddItems, onClose, n8nUrl }) => {
               onClick={handleConfirm}
               className="w-full bg-blue-600 hover:bg-blue-500 text-white font-bold py-4 rounded-xl shadow-lg shadow-blue-600/20 transition-all active:scale-95 mt-4"
             >
-              Save to Log {n8nUrl ? '& Send to Workflow' : ''}
+              Save & Send
             </button>
           </div>
         )}

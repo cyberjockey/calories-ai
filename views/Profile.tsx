@@ -1,6 +1,6 @@
 import React from 'react';
 import { UserGoals } from '../types';
-import { Link2, LogOut } from 'lucide-react';
+import { LogOut } from 'lucide-react';
 import { auth } from '../firebase';
 
 interface ProfileProps {
@@ -85,27 +85,6 @@ const Profile: React.FC<ProfileProps> = ({ goals, setGoals }) => {
                     />
                     <span className="block text-center text-xs text-slate-500 mt-1">grams</span>
                 </div>
-            </div>
-        </div>
-
-        {/* Integrations Section */}
-        <div>
-            <h2 className="text-lg font-semibold text-white mb-4">Integrations</h2>
-            <div className="bg-slate-800/50 p-6 rounded-2xl border border-slate-700">
-                <div className="flex items-center gap-2 mb-2">
-                    <Link2 size={16} className="text-blue-400" />
-                    <label className="block text-slate-400 text-sm font-medium">n8n Webhook URL</label>
-                </div>
-                <p className="text-xs text-slate-500 mb-3">
-                    Automatically send logged meals to your workflow. Payload: <code className="bg-slate-900 px-1 rounded text-blue-200">{`{calories, protein, carbs, fat, notes}`}</code>
-                </p>
-                <input 
-                    type="url" 
-                    value={goals.n8nUrl || ''}
-                    onChange={(e) => handleChange('n8nUrl', e.target.value)}
-                    placeholder="https://your-n8n-instance.com/webhook/..."
-                    className="w-full bg-slate-900 rounded-xl p-4 text-white text-sm border border-slate-700 focus:border-blue-500 outline-none placeholder:text-slate-600"
-                />
             </div>
         </div>
       </div>
