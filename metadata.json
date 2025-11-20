@@ -1,0 +1,7 @@
+{
+  "name": "Calories AI",
+  "description": "The world's most advanced AI-powered calorie and macro tracker. Snap a photo or describe your meal, and let our Gemini-powered engine handle the math.",
+  "requestFramePermissions": [
+    "camera"
+  ]
+}
