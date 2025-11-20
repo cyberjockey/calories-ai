@@ -1,7 +1,14 @@
 import { GoogleGenAI, Type } from "@google/genai";
 
-const apiKey = process.env.API_KEY;
-const ai = new GoogleGenAI({ apiKey: apiKey });
+// Lazy initialization helper
+const getAiClient = () => {
+  const apiKey = process.env.API_KEY;
+  if (!apiKey) {
+    console.error("API_KEY is missing. Please check your .env file and build configuration.");
+    throw new Error("API Key is missing. Application cannot connect to AI service.");
+  }
+  return new GoogleGenAI({ apiKey: apiKey });
+};
 
 // Helper to convert file to base64
 export const fileToGenerativePart = async (file: File): Promise<string> => {
@@ -32,6 +39,7 @@ export interface GeminiAnalysisResult {
 }
 
 export const analyzeFoodImage = async (base64Image: string, promptText?: string): Promise<GeminiAnalysisResult> => {
+  const ai = getAiClient();
   const model = "gemini-2.5-flash";
   
   const prompt = `
@@ -98,6 +106,7 @@ export const analyzeFoodImage = async (base64Image: string, promptText?: string)
 };
 
 export const analyzeFoodText = async (text: string): Promise<GeminiAnalysisResult> => {
+    const ai = getAiClient();
     const model = "gemini-2.5-flash";
     
     const prompt = `
