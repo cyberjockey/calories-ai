@@ -1,17 +1,15 @@
+
 import React, { useState, useRef } from 'react';
 import { Camera, Upload, Type, X, Check, Loader2 } from 'lucide-react';
 import { analyzeFoodImage, analyzeFoodText, GeminiAnalysisResult, fileToGenerativePart } from '../services/geminiService';
 import { Status, FoodItem } from '../types';
-import { v4 as uuidv4 } from 'uuid'; // Pseudo-uuid
+import { N8N_WEBHOOK_URL } from '../config';
 
 interface ScannerProps {
   onAddItems: (items: FoodItem[]) => void;
   onClose: () => void;
-  n8nUrl?: string; // Kept for interface compatibility, but we use the hardcoded one below
+  n8nUrl?: string; // Kept for interface compatibility
 }
-
-// Hardcoded n8n Webhook URL
-const N8N_WEBHOOK_URL = "https://dk001.app.n8n.cloud/webhook-test/adc8abd2-8cf8-4da6-a692-b2229eb94566";
 
 const Scanner: React.FC<ScannerProps> = ({ onAddItems, onClose }) => {
   const [status, setStatus] = useState<Status>(Status.IDLE);
@@ -73,7 +71,7 @@ const Scanner: React.FC<ScannerProps> = ({ onAddItems, onClose }) => {
       imageUrl: imageBase64 || undefined
     }));
 
-    // Send to N8N (Hardcoded URL)
+    // Send to N8N
     try {
         // Sending each item individually to n8n as requested
         for (const item of newItems) {
