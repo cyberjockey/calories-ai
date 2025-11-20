@@ -48,12 +48,13 @@ export const updateUserGoals = async (userId: string, goals: UserGoals) => {
 
 export const addFoodItemToDb = async (userId: string, item: FoodItem) => {
   try {
-    // Updated: Use subcollection path 'users/{userId}/dailyEntries' to match security rules
-    const logsRef = collection(db, USERS_COLLECTION, userId, DAILY_ENTRIES_SUBCOLLECTION);
+    // ALIGNMENT UPDATE: We use the item.id (generated in client) as the Firestore Document ID.
+    // This ensures "item = dailyEntry" strictly, preventing duplicates and allowing direct reference.
+    const docRef = doc(db, USERS_COLLECTION, userId, DAILY_ENTRIES_SUBCOLLECTION, item.id);
     
-    await addDoc(logsRef, {
+    await setDoc(docRef, {
       ...item,
-      userId: userId, // Updated: Must use 'userId' to match 'request.resource.data.userId' in rules
+      userId: userId, // Essential for Security Rules (request.resource.data.userId == request.auth.uid)
       timestamp: Timestamp.fromMillis(item.timestamp) 
     });
   } catch (error) {
@@ -63,7 +64,7 @@ export const addFoodItemToDb = async (userId: string, item: FoodItem) => {
 
 export const deleteFoodItemFromDb = async (userId: string, itemId: string) => {
   try {
-    // Updated: Use subcollection path to locate the correct document for deletion
+    // Delete the document from the dailyEntries subcollection
     const docRef = doc(db, USERS_COLLECTION, userId, DAILY_ENTRIES_SUBCOLLECTION, itemId);
     await deleteDoc(docRef);
   } catch (error) {
@@ -84,7 +85,7 @@ export const getFoodHistoryFromDb = async (userId: string): Promise<FoodItem[]> 
       const ts = data.timestamp instanceof Timestamp ? data.timestamp.toMillis() : (data.timestamp || Date.now());
       
       return {
-        id: doc.id,
+        id: doc.id, // This should match item.id now
         name: data.name || 'Unknown',
         calories: Number(data.calories) || 0,
         protein: Number(data.protein) || 0,
