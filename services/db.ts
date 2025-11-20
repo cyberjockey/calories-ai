@@ -1,18 +1,14 @@
 
-import { db } from '../firebase';
+import { db, auth } from '../firebase';
 import { 
-  collection, 
   doc, 
   getDoc, 
   setDoc, 
-  addDoc, 
   deleteDoc, 
-  getDocs,
-  query,
-  orderBy,
   Timestamp 
 } from 'firebase/firestore';
 import { FoodItem, UserGoals } from '../types';
+import { FIREBASE_CONFIG } from '../config';
 
 const USERS_COLLECTION = 'users';
 const DAILY_ENTRIES_SUBCOLLECTION = 'dailyEntries';
@@ -74,30 +70,76 @@ export const deleteFoodItemFromDb = async (userId: string, itemId: string) => {
 
 export const getFoodHistoryFromDb = async (userId: string): Promise<FoodItem[]> => {
   try {
-    const logsRef = collection(db, USERS_COLLECTION, userId, DAILY_ENTRIES_SUBCOLLECTION);
-    // Order by timestamp descending (newest first)
-    const q = query(logsRef, orderBy('timestamp', 'desc'));
-    const querySnapshot = await getDocs(q);
+    // Use Firestore REST API as requested
+    // URL: https://firestore.googleapis.com/v1/projects/calories-ai-68330/databases/(default)/documents/users/uid/dailyEntries/
 
-    return querySnapshot.docs.map(doc => {
-      const data = doc.data();
-      // Convert Firestore Timestamp back to milliseconds number
-      const ts = data.timestamp instanceof Timestamp ? data.timestamp.toMillis() : (data.timestamp || Date.now());
-      
-      return {
-        id: doc.id, // This should match item.id now
-        name: data.name || 'Unknown',
-        calories: Number(data.calories) || 0,
-        protein: Number(data.protein) || 0,
-        carbs: Number(data.carbs) || 0,
-        fat: Number(data.fat) || 0,
-        notes: data.notes || '',
-        imageUrl: data.imageUrl,
-        timestamp: ts
-      } as FoodItem;
+    const currentUser = auth.currentUser;
+    if (!currentUser) {
+        // If auth isn't ready, we can't fetch securely
+        return [];
+    }
+    
+    const token = await currentUser.getIdToken();
+    const projectId = FIREBASE_CONFIG.projectId;
+    
+    // We add pageSize to ensure we capture a good amount of history, as the default page size is small.
+    // Using the exact path structure requested.
+    const url = `https://firestore.googleapis.com/v1/projects/${projectId}/databases/(default)/documents/users/${userId}/dailyEntries?pageSize=300`;
+
+    const response = await fetch(url, {
+        method: 'GET',
+        headers: {
+            'Authorization': `Bearer ${token}`
+        }
     });
+
+    if (!response.ok) {
+        // Log error but return empty to avoid crashing UI
+        console.error(`Firestore REST API Error: ${response.status} ${response.statusText}`);
+        return [];
+    }
+
+    const data = await response.json();
+    
+    // If collection is empty, 'documents' key is missing
+    if (!data.documents || !Array.isArray(data.documents)) {
+        return [];
+    }
+
+    return data.documents.map((doc: any) => {
+        const fields = doc.fields || {};
+        const id = doc.name.split('/').pop(); // Extract ID from the resource path
+
+        // Helper to extract typed values from Firestore REST JSON structure
+        // e.g. { stringValue: "Apple" } or { integerValue: "100" }
+        const getString = (f: any) => f?.stringValue || '';
+        const getNumber = (f: any) => Number(f?.integerValue || f?.doubleValue || 0);
+
+        // Timestamp handling:
+        // If saved via SDK Timestamp.fromMillis, it appears as timestampValue (ISO string)
+        // If saved as number, it appears as integerValue.
+        let timestamp = Date.now();
+        if (fields.timestamp?.timestampValue) {
+            timestamp = new Date(fields.timestamp.timestampValue).getTime();
+        } else if (fields.timestamp?.integerValue) {
+            timestamp = Number(fields.timestamp.integerValue);
+        }
+
+        return {
+            id: id,
+            name: getString(fields.name) || 'Unknown',
+            calories: getNumber(fields.calories),
+            protein: getNumber(fields.protein),
+            carbs: getNumber(fields.carbs),
+            fat: getNumber(fields.fat),
+            notes: getString(fields.notes),
+            imageUrl: getString(fields.imageUrl) || undefined,
+            timestamp: timestamp
+        } as FoodItem;
+    });
+
   } catch (error) {
-    console.error("DB Read Error (getFoodHistoryFromDb):", error);
+    console.error("DB Read Error (REST API):", error);
     return [];
   }
 };
