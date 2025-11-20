@@ -8,5 +8,7 @@ import { FIREBASE_CONFIG } from './config';
 const app = initializeApp(FIREBASE_CONFIG);
 
 export const auth = getAuth(app);
+auth.useDeviceLanguage(); // Use the device's default language
+
 export const db = getFirestore(app);
 export const googleProvider = new GoogleAuthProvider();
