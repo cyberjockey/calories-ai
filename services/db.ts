@@ -5,30 +5,62 @@ import {
   getDoc, 
   setDoc, 
   deleteDoc, 
-  Timestamp 
+  Timestamp,
+  increment
 } from 'firebase/firestore';
-import { FoodItem, UserGoals } from '../types';
+import { FoodItem, UserGoals, SubscriptionStatus } from '../types';
 import { FIREBASE_CONFIG } from '../config';
 
 const USERS_COLLECTION = 'users';
 const DAILY_ENTRIES_SUBCOLLECTION = 'dailyEntries';
 
-// --- Goals ---
+// --- Goals & Subscription ---
 
-export const getUserGoals = async (userId: string): Promise<UserGoals | null> => {
+export const getUserData = async (userId: string): Promise<{ 
+  goals: UserGoals | null, 
+  subscriptionStatus: SubscriptionStatus,
+  dailyUsage: number 
+}> => {
   try {
     const docRef = doc(db, USERS_COLLECTION, userId);
     const docSnap = await getDoc(docRef);
+    
     if (docSnap.exists()) {
       const data = docSnap.data();
-      return (data as any)?.goals as UserGoals;
+      
+      // Subscription Status
+      const rawStatus = data.subscriptionStatus;
+      const subscriptionStatus: SubscriptionStatus = (rawStatus === 'pro_plan' || rawStatus === 'free_plan') 
+        ? rawStatus 
+        : 'free_plan';
+
+      // Daily Usage Logic
+      // We check if 'lastAnalysisDate' matches today. If not, usage is 0.
+      const today = new Date().toLocaleDateString('en-CA'); // YYYY-MM-DD
+      let dailyUsage = 0;
+      
+      if (data.lastAnalysisDate === today) {
+        dailyUsage = data.analysesToday || 0;
+      }
+
+      return {
+        goals: (data.goals as UserGoals) || null,
+        subscriptionStatus,
+        dailyUsage
+      };
     }
-    return null;
+    
+    // Default if user doc doesn't exist yet
+    return { goals: null, subscriptionStatus: 'free_plan', dailyUsage: 0 };
   } catch (error) {
-    // Suppress permission errors silently or with warning to allow fallback to default goals
-    console.warn("DB Read Error (getUserGoals) - using defaults:", error);
-    return null;
+    console.warn("DB Read Error (getUserData) - using defaults:", error);
+    return { goals: null, subscriptionStatus: 'free_plan', dailyUsage: 0 };
   }
+};
+
+export const getUserGoals = async (userId: string): Promise<UserGoals | null> => {
+    const data = await getUserData(userId);
+    return data.goals;
 };
 
 export const updateUserGoals = async (userId: string, goals: UserGoals) => {
@@ -40,17 +72,44 @@ export const updateUserGoals = async (userId: string, goals: UserGoals) => {
   }
 };
 
+// --- Usage Metrics ---
+
+export const incrementDailyAnalysisCount = async (userId: string) => {
+    try {
+        const today = new Date().toLocaleDateString('en-CA'); // YYYY-MM-DD
+        const docRef = doc(db, USERS_COLLECTION, userId);
+        
+        // We need to read first to check the date, or use a smart update.
+        // Simple read-modify-write pattern is sufficient here.
+        const docSnap = await getDoc(docRef);
+        
+        if (docSnap.exists()) {
+            const data = docSnap.data();
+            if (data.lastAnalysisDate === today) {
+                // Same day, just increment
+                await setDoc(docRef, { analysesToday: increment(1) }, { merge: true });
+            } else {
+                // New day, reset to 1 and update date
+                await setDoc(docRef, { analysesToday: 1, lastAnalysisDate: today }, { merge: true });
+            }
+        } else {
+            // Initialize doc
+            await setDoc(docRef, { analysesToday: 1, lastAnalysisDate: today }, { merge: true });
+        }
+    } catch (error) {
+         console.warn("DB Write Error (incrementDailyAnalysisCount):", error);
+    }
+}
+
 // --- Logs ---
 
 export const addFoodItemToDb = async (userId: string, item: FoodItem) => {
   try {
-    // ALIGNMENT UPDATE: We use the item.id (generated in client) as the Firestore Document ID.
-    // This ensures "item = dailyEntry" strictly, preventing duplicates and allowing direct reference.
     const docRef = doc(db, USERS_COLLECTION, userId, DAILY_ENTRIES_SUBCOLLECTION, item.id);
     
     await setDoc(docRef, {
       ...item,
-      userId: userId, // Essential for Security Rules (request.resource.data.userId == request.auth.uid)
+      userId: userId, 
       timestamp: Timestamp.fromMillis(item.timestamp) 
     });
   } catch (error) {
@@ -60,7 +119,6 @@ export const addFoodItemToDb = async (userId: string, item: FoodItem) => {
 
 export const deleteFoodItemFromDb = async (userId: string, itemId: string) => {
   try {
-    // Delete the document from the dailyEntries subcollection
     const docRef = doc(db, USERS_COLLECTION, userId, DAILY_ENTRIES_SUBCOLLECTION, itemId);
     await deleteDoc(docRef);
   } catch (error) {
@@ -70,20 +128,13 @@ export const deleteFoodItemFromDb = async (userId: string, itemId: string) => {
 
 export const getFoodHistoryFromDb = async (userId: string): Promise<FoodItem[]> => {
   try {
-    // Use Firestore REST API as requested
-    // URL: https://firestore.googleapis.com/v1/projects/calories-ai-68330/databases/(default)/documents/users/uid/dailyEntries/
-
     const currentUser = auth.currentUser;
     if (!currentUser) {
-        // If auth isn't ready, we can't fetch securely
         return [];
     }
     
     const token = await currentUser.getIdToken();
     const projectId = FIREBASE_CONFIG.projectId;
-    
-    // We add pageSize to ensure we capture a good amount of history, as the default page size is small.
-    // Using the exact path structure requested.
     const url = `https://firestore.googleapis.com/v1/projects/${projectId}/databases/(default)/documents/users/${userId}/dailyEntries?pageSize=300`;
 
     const response = await fetch(url, {
@@ -94,30 +145,23 @@ export const getFoodHistoryFromDb = async (userId: string): Promise<FoodItem[]> 
     });
 
     if (!response.ok) {
-        // Log error but return empty to avoid crashing UI
         console.error(`Firestore REST API Error: ${response.status} ${response.statusText}`);
         return [];
     }
 
     const data = await response.json();
     
-    // If collection is empty, 'documents' key is missing
     if (!data.documents || !Array.isArray(data.documents)) {
         return [];
     }
 
     return data.documents.map((doc: any) => {
         const fields = doc.fields || {};
-        const id = doc.name.split('/').pop(); // Extract ID from the resource path
+        const id = doc.name.split('/').pop();
 
-        // Helper to extract typed values from Firestore REST JSON structure
-        // e.g. { stringValue: "Apple" } or { integerValue: "100" }
         const getString = (f: any) => f?.stringValue || '';
         const getNumber = (f: any) => Number(f?.integerValue || f?.doubleValue || 0);
 
-        // Timestamp handling:
-        // If saved via SDK Timestamp.fromMillis, it appears as timestampValue (ISO string)
-        // If saved as number, it appears as integerValue.
         let timestamp = Date.now();
         if (fields.timestamp?.timestampValue) {
             timestamp = new Date(fields.timestamp.timestampValue).getTime();

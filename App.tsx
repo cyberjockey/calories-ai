@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect } from 'react';
-import { View, FoodItem, UserGoals, DayLog } from './types';
+import { View, FoodItem, UserGoals, DayLog, SubscriptionStatus } from './types';
 import BottomNav from './components/BottomNav';
 import Dashboard from './views/Dashboard';
 import Scanner from './views/Scanner';
@@ -12,11 +12,12 @@ import Login from './views/Login';
 import { auth } from './firebase';
 import { onAuthStateChanged, User } from 'firebase/auth';
 import { 
-  getUserGoals, 
+  getUserData, 
   updateUserGoals, 
   addFoodItemToDb, 
   deleteFoodItemFromDb,
-  getFoodHistoryFromDb
+  getFoodHistoryFromDb,
+  incrementDailyAnalysisCount
 } from './services/db';
 import { Loader2 } from 'lucide-react';
 
@@ -39,6 +40,8 @@ const App: React.FC = () => {
   const [history, setHistory] = useState<DayLog[]>([]);
   const [historyLoading, setHistoryLoading] = useState(false);
   const [historyError, setHistoryError] = useState<string | null>(null);
+  const [subscriptionStatus, setSubscriptionStatus] = useState<SubscriptionStatus>('free_plan');
+  const [dailyUsage, setDailyUsage] = useState(0);
 
   // 1. Handle Authentication
   useEffect(() => {
@@ -84,7 +87,6 @@ const App: React.FC = () => {
   };
 
   const fetchHistory = async (uid: string) => {
-    console.log("Fetching history from Firestore...");
     setHistoryLoading(true);
     setHistoryError(null);
     try {
@@ -108,14 +110,15 @@ const App: React.FC = () => {
   useEffect(() => {
     if (!user) return;
 
-    // Fetch initial goals
-    getUserGoals(user.uid).then((fetchedGoals) => {
-      if (fetchedGoals) {
-        setGoals(fetchedGoals);
+    // Fetch User Data (Goals, Subscription, Usage)
+    getUserData(user.uid).then((data) => {
+      if (data.goals) {
+        setGoals(data.goals);
       } else {
-        // Initialize default goals for new user (or if DB fetch failed due to permissions)
-        updateUserGoals(user.uid, DEFAULT_GOALS).catch(err => console.warn("Init goals failed (offline/perms)", err));
+        updateUserGoals(user.uid, DEFAULT_GOALS).catch(err => console.warn("Init goals failed", err));
       }
+      setSubscriptionStatus(data.subscriptionStatus);
+      setDailyUsage(data.dailyUsage);
     });
 
     // Fetch History on load
@@ -132,38 +135,36 @@ const App: React.FC = () => {
   // Handlers
   const handleAddItems = async (newItems: FoodItem[]) => {
     if (!user) return;
-    
-    // Add to Firestore
-    // We await these sequentially to ensure order, or Promise.all for speed
     await Promise.all(newItems.map(item => addFoodItemToDb(user.uid, item)));
-    
-    // Refresh history immediately
     fetchHistory(user.uid);
+  };
+
+  const handleAnalysisComplete = () => {
+      if (user) {
+          incrementDailyAnalysisCount(user.uid);
+          setDailyUsage(prev => prev + 1);
+      }
   };
 
   const handleDeleteItem = async (id: string) => {
     if (!user) return;
     await deleteFoodItemFromDb(user.uid, id);
-    // Refresh history immediately
     fetchHistory(user.uid);
   };
 
   const handleUpdateGoals = async (newGoals: UserGoals) => {
     if (!user) return;
-    setGoals(newGoals); // Optimistic update
+    setGoals(newGoals);
     await updateUserGoals(user.uid, newGoals);
   };
 
-  // Navigation Handler
   const handleNavChange = (view: View) => {
-    // If clicking History while already on History, force a refresh
     if (view === View.HISTORY && currentView === View.HISTORY && user) {
          fetchHistory(user.uid);
     }
     setCurrentView(view);
   };
 
-  // Loading Screen
   if (authLoading) {
     return (
       <div className="h-screen w-full bg-slate-900 flex items-center justify-center text-white">
@@ -172,7 +173,6 @@ const App: React.FC = () => {
     );
   }
 
-  // Login Screen
   if (!user) {
     return <Login />;
   }
@@ -191,7 +191,7 @@ const App: React.FC = () => {
             />
         );
       case View.PROFILE:
-        return <Profile goals={goals} setGoals={handleUpdateGoals} />;
+        return <Profile goals={goals} setGoals={handleUpdateGoals} subscriptionStatus={subscriptionStatus} dailyUsage={dailyUsage} uid={user.uid} />;
       case View.SCANNER:
         return <Dashboard goals={goals} todayLog={todayLog} onDelete={handleDeleteItem} />; 
       default:
@@ -203,22 +203,21 @@ const App: React.FC = () => {
     <div className="min-h-screen bg-slate-900 text-slate-50 flex justify-center">
       <div className="w-full max-w-md relative shadow-2xl bg-slate-900 min-h-screen">
         
-        {/* Main Content Area */}
         <main className="w-full h-full pt-safe-top">
           {renderView()}
         </main>
 
-        {/* Scanner Modal Overlay */}
         {currentView === View.SCANNER && (
           <Scanner 
             onAddItems={handleAddItems} 
             onClose={() => setCurrentView(View.DASHBOARD)}
-            n8nUrl={goals.n8nUrl}
             uid={user.uid} 
+            subscriptionStatus={subscriptionStatus}
+            dailyUsage={dailyUsage}
+            onAnalysisComplete={handleAnalysisComplete}
           />
         )}
 
-        {/* Bottom Navigation */}
         <BottomNav currentView={currentView === View.SCANNER ? View.DASHBOARD : currentView} onChangeView={handleNavChange} />
         
       </div>

@@ -1,24 +1,22 @@
 
 import React from 'react';
-import { UserGoals } from '../types';
-import { LogOut } from 'lucide-react';
+import { UserGoals, SubscriptionStatus } from '../types';
+import { LogOut, Zap, Crown, FileText } from 'lucide-react';
 import { auth } from '../firebase';
 import { signOut } from 'firebase/auth';
 
 interface ProfileProps {
   goals: UserGoals;
   setGoals: (goals: UserGoals) => void;
+  subscriptionStatus: SubscriptionStatus;
+  dailyUsage: number;
+  uid: string;
 }
 
-const Profile: React.FC<ProfileProps> = ({ goals, setGoals }) => {
-  const handleChange = (key: keyof UserGoals, value: string | number) => {
-    // Handle n8nUrl string vs number fields
-    if (key === 'n8nUrl') {
-        setGoals({ ...goals, [key]: value as string });
-    } else {
-        const num = parseInt(value as string) || 0;
-        setGoals({ ...goals, [key]: num });
-    }
+const Profile: React.FC<ProfileProps> = ({ goals, setGoals, subscriptionStatus, dailyUsage, uid }) => {
+  const handleChange = (key: keyof UserGoals, value: string) => {
+    const num = parseInt(value) || 0;
+    setGoals({ ...goals, [key]: num });
   };
 
   const handleSignOut = () => {
@@ -40,6 +38,67 @@ const Profile: React.FC<ProfileProps> = ({ goals, setGoals }) => {
       
       <div className="space-y-6">
         
+        {/* Subscription Section */}
+        <div className="bg-slate-800 p-5 rounded-2xl border border-slate-700 relative overflow-hidden">
+            {subscriptionStatus === 'pro_plan' && (
+                <div className="absolute top-0 right-0 p-2 opacity-10 pointer-events-none">
+                    <Crown size={100} className="text-yellow-500" />
+                </div>
+            )}
+            <div className="flex justify-between items-start mb-4 relative z-10">
+                <div>
+                    <h2 className="text-white font-bold text-lg">Subscription</h2>
+                    <p className="text-slate-400 text-sm mt-1">
+                        {subscriptionStatus === 'free_plan' ? 'Free Plan' : 'Pro Plan'}
+                    </p>
+                </div>
+                {subscriptionStatus === 'pro_plan' ? (
+                    <div className="bg-gradient-to-tr from-yellow-500 to-amber-500 text-slate-900 text-xs font-bold px-3 py-1 rounded-full flex items-center gap-1">
+                        <Crown size={12} fill="currentColor" />
+                        PRO
+                    </div>
+                ) : (
+                    <div className="bg-slate-700 text-slate-300 text-xs font-bold px-3 py-1 rounded-full">
+                        FREE
+                    </div>
+                )}
+            </div>
+
+            {subscriptionStatus === 'free_plan' ? (
+                <div className="relative z-10">
+                    <div className="flex justify-between text-sm mb-2">
+                        <span className="text-slate-300">Daily Analyses</span>
+                        <span className="text-white font-bold">{dailyUsage} / 3</span>
+                    </div>
+                    <div className="w-full bg-slate-700 h-2 rounded-full overflow-hidden">
+                        <div 
+                            className={`h-full ${dailyUsage >= 3 ? 'bg-red-500' : 'bg-blue-500'}`} 
+                            style={{ width: `${Math.min(100, (dailyUsage / 3) * 100)}%` }}
+                        ></div>
+                    </div>
+                    <a 
+                        href={`https://buy.stripe.com/test_eVq7sL1OJ9Uvbwp45kfrW01?client_reference_id=${uid}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="block text-center w-full mt-4 py-2 bg-gradient-to-r from-purple-600 to-blue-600 rounded-xl text-white font-bold text-sm shadow-lg shadow-blue-900/20"
+                    >
+                        Upgrade to Pro
+                    </a>
+                </div>
+            ) : (
+                <div className="relative z-10 space-y-2">
+                    <div className="flex items-center gap-2 text-green-400 text-sm">
+                        <Zap size={16} fill="currentColor" />
+                        <span className="font-bold">Unlimited Analyses</span>
+                    </div>
+                    <div className="flex items-center gap-2 text-blue-400 text-sm">
+                        <FileText size={16} />
+                        <span className="font-bold">Daily Reports Included</span>
+                    </div>
+                </div>
+            )}
+        </div>
+
         {/* Goals Section */}
         <div>
             <h2 className="text-lg font-semibold text-white mb-4">Daily Goals</h2>
@@ -87,19 +146,6 @@ const Profile: React.FC<ProfileProps> = ({ goals, setGoals }) => {
                     />
                     <span className="block text-center text-xs text-slate-500 mt-1">grams</span>
                 </div>
-            </div>
-            
-             {/* N8N Webhook URL Config */}
-             <div className="bg-slate-800/50 p-6 rounded-2xl border border-slate-700 mt-4">
-                <label className="block text-slate-400 text-sm font-medium mb-2">N8N Webhook URL</label>
-                <input 
-                    type="text" 
-                    placeholder="https://..."
-                    value={goals.n8nUrl || ''}
-                    onChange={(e) => handleChange('n8nUrl', e.target.value)}
-                    className="w-full bg-slate-900 rounded-xl p-3 text-white border border-slate-700 outline-none focus:border-blue-500 text-sm"
-                />
-                <p className="text-xs text-slate-500 mt-2">Optional: Overrides the default webhook for data export.</p>
             </div>
         </div>
       </div>

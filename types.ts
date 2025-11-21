@@ -1,9 +1,12 @@
+
 export enum View {
   DASHBOARD = 'DASHBOARD',
   SCANNER = 'SCANNER',
   HISTORY = 'HISTORY',
   PROFILE = 'PROFILE'
 }
+
+export type SubscriptionStatus = 'free_plan' | 'pro_plan';
 
 export interface MacroNutrients {
   calories: number;
@@ -31,7 +34,6 @@ export interface UserGoals {
   protein: number;
   carbs: number;
   fat: number;
-  n8nUrl?: string; // Added for N8N integration
 }
 
 export enum Status {
