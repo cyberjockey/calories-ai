@@ -188,6 +188,8 @@ const App: React.FC = () => {
                 isLoading={historyLoading} 
                 error={historyError} 
                 onRetry={() => fetchHistory(user.uid)} 
+                subscriptionStatus={subscriptionStatus}
+                uid={user.uid}
             />
         );
       case View.PROFILE:

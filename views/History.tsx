@@ -1,16 +1,43 @@
 
 import React from 'react';
-import { DayLog } from '../types';
-import { Calendar, Loader2, RefreshCw, WifiOff } from 'lucide-react';
+import { DayLog, SubscriptionStatus } from '../types';
+import { Calendar, Loader2, RefreshCw, WifiOff, Lock, Crown } from 'lucide-react';
 
 interface HistoryProps {
   history: DayLog[];
   isLoading: boolean;
   error?: string | null;
   onRetry?: () => void;
+  subscriptionStatus: SubscriptionStatus;
+  uid: string;
 }
 
-const History: React.FC<HistoryProps> = ({ history, isLoading, error, onRetry }) => {
+const History: React.FC<HistoryProps> = ({ history, isLoading, error, onRetry, subscriptionStatus, uid }) => {
+  
+  if (subscriptionStatus !== 'pro_plan') {
+     return (
+        <div className="w-full px-4 py-6 pb-24 animate-fade-in flex flex-col items-center justify-center h-[80vh]">
+            <div className="w-24 h-24 rounded-full bg-gradient-to-tr from-slate-800 to-slate-700 flex items-center justify-center mb-6 shadow-xl border border-slate-700">
+                <Lock size={40} className="text-yellow-500" />
+            </div>
+            <h2 className="text-2xl font-bold text-white mb-3 text-center">History is Locked</h2>
+            <p className="text-slate-400 text-center max-w-xs mb-8 leading-relaxed">
+                Upgrade to <span className="text-white font-semibold">Pro Plan</span> to unlock your full nutritional history and detailed daily logs.
+            </p>
+            
+            <a 
+                href={`https://buy.stripe.com/test_eVq7sL1OJ9Uvbwp45kfrW01?client_reference_id=${uid}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center gap-2 bg-gradient-to-r from-purple-600 to-blue-600 text-white font-bold py-4 px-8 rounded-xl shadow-lg shadow-purple-600/20 hover:scale-105 transition-transform"
+            >
+                <Crown size={20} fill="currentColor" />
+                Upgrade to Pro
+            </a>
+        </div>
+     );
+  }
+
   return (
     <div className="w-full px-4 py-6 pb-24 animate-fade-in">
       <div className="flex justify-between items-center mb-6 pl-2">
