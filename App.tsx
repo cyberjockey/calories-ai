@@ -12,12 +12,12 @@ import Login from './views/Login';
 import { auth } from './firebase';
 import { onAuthStateChanged, User } from 'firebase/auth';
 import { 
-  getUserData, 
   updateUserGoals, 
   addFoodItemToDb, 
   deleteFoodItemFromDb,
   getFoodHistoryFromDb,
-  incrementDailyAnalysisCount
+  incrementDailyAnalysisCount,
+  subscribeToUserData
 } from './services/db';
 import { Loader2 } from 'lucide-react';
 
@@ -110,11 +110,13 @@ const App: React.FC = () => {
   useEffect(() => {
     if (!user) return;
 
-    // Fetch User Data (Goals, Subscription, Usage)
-    getUserData(user.uid).then((data) => {
+    // Real-time subscription for User Data (Goals, Subscription, Usage)
+    // This automatically updates the UI when the subscription status changes in Firestore
+    const unsubscribeUserData = subscribeToUserData(user.uid, (data) => {
       if (data.goals) {
         setGoals(data.goals);
       } else {
+        // Initialize default goals if missing
         updateUserGoals(user.uid, DEFAULT_GOALS).catch(err => console.warn("Init goals failed", err));
       }
       setSubscriptionStatus(data.subscriptionStatus);
@@ -123,6 +125,10 @@ const App: React.FC = () => {
 
     // Fetch History on load
     fetchHistory(user.uid);
+
+    return () => {
+      unsubscribeUserData();
+    };
   }, [user]);
 
   // 3. Fetch History when switching to History view
@@ -142,7 +148,7 @@ const App: React.FC = () => {
   const handleAnalysisComplete = () => {
       if (user) {
           incrementDailyAnalysisCount(user.uid);
-          setDailyUsage(prev => prev + 1);
+          // Usage count will update via the real-time listener
       }
   };
 

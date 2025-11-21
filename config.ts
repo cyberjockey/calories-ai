@@ -13,7 +13,7 @@ export const FIREBASE_CONFIG = {
 
 // Your N8N Webhook URL
 export const N8N_WEBHOOK_URL = "https://dk001.app.n8n.cloud/webhook/adc8abd2-8cf8-4da6-a692-b2229eb94566";
-export const N8N_GET_HISTORY_URL = "https://dk001.app.n8n.cloud/webhook-test/dd25abcb-d60a-4135-b94f-1e2d5f283c7a";
+export const N8N_GET_HISTORY_URL = "https://dk001.app.n8n.cloud/webhook/dd25abcb-d60a-4135-b94f-1e2d5f283c7a";
 
 // Stripe Payment Link
 export const STRIPE_PAYMENT_LINK = "https://buy.stripe.com/test_eVq7sL1OJ9Uvbwp45kfrW01";

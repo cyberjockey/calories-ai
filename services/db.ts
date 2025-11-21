@@ -1,12 +1,15 @@
-
 import { db, auth } from '../firebase';
 import { 
   doc, 
   getDoc, 
   setDoc, 
   deleteDoc, 
+  collection,
+  query,
+  getDocs,
   Timestamp,
-  increment
+  increment,
+  onSnapshot
 } from 'firebase/firestore';
 import { FoodItem, UserGoals, SubscriptionStatus } from '../types';
 import { FIREBASE_CONFIG } from '../config';
@@ -56,6 +59,45 @@ export const getUserData = async (userId: string): Promise<{
     console.warn("DB Read Error (getUserData) - using defaults:", error);
     return { goals: null, subscriptionStatus: 'free_plan', dailyUsage: 0 };
   }
+};
+
+export const subscribeToUserData = (userId: string, onUpdate: (data: { 
+  goals: UserGoals | null, 
+  subscriptionStatus: SubscriptionStatus,
+  dailyUsage: number 
+}) => void) => {
+  const docRef = doc(db, USERS_COLLECTION, userId);
+  
+  return onSnapshot(docRef, (docSnap) => {
+    if (docSnap.exists()) {
+      const data = docSnap.data();
+      
+      // Subscription Status
+      const rawStatus = data.subscriptionStatus;
+      const subscriptionStatus: SubscriptionStatus = (rawStatus === 'pro_plan' || rawStatus === 'free_plan') 
+        ? rawStatus 
+        : 'free_plan';
+
+      // Daily Usage Logic
+      const today = new Date().toLocaleDateString('en-CA'); // YYYY-MM-DD
+      let dailyUsage = 0;
+      
+      if (data.lastAnalysisDate === today) {
+        dailyUsage = data.analysesToday || 0;
+      }
+
+      onUpdate({
+        goals: (data.goals as UserGoals) || null,
+        subscriptionStatus,
+        dailyUsage
+      });
+    } else {
+      // Default if user doc doesn't exist yet
+      onUpdate({ goals: null, subscriptionStatus: 'free_plan', dailyUsage: 0 });
+    }
+  }, (error) => {
+    console.error("Real-time user data listener error:", error);
+  });
 };
 
 export const getUserGoals = async (userId: string): Promise<UserGoals | null> => {
@@ -128,62 +170,26 @@ export const deleteFoodItemFromDb = async (userId: string, itemId: string) => {
 
 export const getFoodHistoryFromDb = async (userId: string): Promise<FoodItem[]> => {
   try {
-    const currentUser = auth.currentUser;
-    if (!currentUser) {
-        return [];
-    }
-    
-    const token = await currentUser.getIdToken();
-    const projectId = FIREBASE_CONFIG.projectId;
-    const url = `https://firestore.googleapis.com/v1/projects/${projectId}/databases/(default)/documents/users/${userId}/dailyEntries?pageSize=300`;
+    const entriesRef = collection(db, USERS_COLLECTION, userId, DAILY_ENTRIES_SUBCOLLECTION);
+    const q = query(entriesRef);
+    const querySnapshot = await getDocs(q);
 
-    const response = await fetch(url, {
-        method: 'GET',
-        headers: {
-            'Authorization': `Bearer ${token}`
-        }
+    const items: FoodItem[] = [];
+    querySnapshot.forEach((doc) => {
+      const data = doc.data();
+      // Convert Firestore Timestamp to millis
+      const timestamp = data.timestamp instanceof Timestamp ? data.timestamp.toMillis() : data.timestamp;
+      
+      items.push({
+        ...data,
+        id: doc.id,
+        timestamp: timestamp
+      } as FoodItem);
     });
-
-    if (!response.ok) {
-        console.error(`Firestore REST API Error: ${response.status} ${response.statusText}`);
-        return [];
-    }
-
-    const data = await response.json();
     
-    if (!data.documents || !Array.isArray(data.documents)) {
-        return [];
-    }
-
-    return data.documents.map((doc: any) => {
-        const fields = doc.fields || {};
-        const id = doc.name.split('/').pop();
-
-        const getString = (f: any) => f?.stringValue || '';
-        const getNumber = (f: any) => Number(f?.integerValue || f?.doubleValue || 0);
-
-        let timestamp = Date.now();
-        if (fields.timestamp?.timestampValue) {
-            timestamp = new Date(fields.timestamp.timestampValue).getTime();
-        } else if (fields.timestamp?.integerValue) {
-            timestamp = Number(fields.timestamp.integerValue);
-        }
-
-        return {
-            id: id,
-            name: getString(fields.name) || 'Unknown',
-            calories: getNumber(fields.calories),
-            protein: getNumber(fields.protein),
-            carbs: getNumber(fields.carbs),
-            fat: getNumber(fields.fat),
-            notes: getString(fields.notes),
-            imageUrl: getString(fields.imageUrl) || undefined,
-            timestamp: timestamp
-        } as FoodItem;
-    });
-
+    return items;
   } catch (error) {
-    console.error("DB Read Error (REST API):", error);
-    return [];
+    console.error("DB Read Error (getFoodHistoryFromDb):", error);
+    throw error;
   }
 };
