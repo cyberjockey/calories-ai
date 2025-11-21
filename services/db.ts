@@ -1,3 +1,4 @@
+
 import { db, auth } from '../firebase';
 import { 
   doc, 
@@ -16,6 +17,15 @@ import { FIREBASE_CONFIG } from '../config';
 
 const USERS_COLLECTION = 'users';
 const DAILY_ENTRIES_SUBCOLLECTION = 'dailyEntries';
+
+// Helper for consistent local date string YYYY-MM-DD
+const getTodayDateString = () => {
+  const date = new Date();
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+};
 
 // --- Goals & Subscription ---
 
@@ -38,12 +48,11 @@ export const getUserData = async (userId: string): Promise<{
         : 'free_plan';
 
       // Daily Usage Logic
-      // We check if 'lastAnalysisDate' matches today. If not, usage is 0.
-      const today = new Date().toLocaleDateString('en-CA'); // YYYY-MM-DD
+      const today = getTodayDateString();
       let dailyUsage = 0;
       
       if (data.lastAnalysisDate === today) {
-        dailyUsage = data.analysesToday || 0;
+        dailyUsage = typeof data.analysesToday === 'number' ? data.analysesToday : 0;
       }
 
       return {
@@ -79,11 +88,11 @@ export const subscribeToUserData = (userId: string, onUpdate: (data: {
         : 'free_plan';
 
       // Daily Usage Logic
-      const today = new Date().toLocaleDateString('en-CA'); // YYYY-MM-DD
+      const today = getTodayDateString();
       let dailyUsage = 0;
       
       if (data.lastAnalysisDate === today) {
-        dailyUsage = data.analysesToday || 0;
+        dailyUsage = typeof data.analysesToday === 'number' ? data.analysesToday : 0;
       }
 
       onUpdate({
@@ -118,11 +127,9 @@ export const updateUserGoals = async (userId: string, goals: UserGoals) => {
 
 export const incrementDailyAnalysisCount = async (userId: string) => {
     try {
-        const today = new Date().toLocaleDateString('en-CA'); // YYYY-MM-DD
+        const today = getTodayDateString();
         const docRef = doc(db, USERS_COLLECTION, userId);
         
-        // We need to read first to check the date, or use a smart update.
-        // Simple read-modify-write pattern is sufficient here.
         const docSnap = await getDoc(docRef);
         
         if (docSnap.exists()) {
