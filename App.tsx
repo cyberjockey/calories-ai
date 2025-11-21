@@ -15,6 +15,7 @@ import {
   updateUserGoals, 
   addFoodItemToDb, 
   deleteFoodItemFromDb,
+  updateFoodItemInDb,
   getFoodHistoryFromDb,
   incrementDailyAnalysisCount,
   subscribeToUserData
@@ -157,6 +158,12 @@ const App: React.FC = () => {
     await deleteFoodItemFromDb(user.uid, id);
     fetchHistory(user.uid);
   };
+  
+  const handleUpdateItem = async (item: FoodItem) => {
+      if (!user) return;
+      await updateFoodItemInDb(user.uid, item);
+      fetchHistory(user.uid);
+  }
 
   const handleUpdateGoals = async (newGoals: UserGoals) => {
     if (!user) return;
@@ -186,7 +193,7 @@ const App: React.FC = () => {
   const renderView = () => {
     switch (currentView) {
       case View.DASHBOARD:
-        return <Dashboard goals={goals} todayLog={todayLog} onDelete={handleDeleteItem} />;
+        return <Dashboard goals={goals} todayLog={todayLog} onDelete={handleDeleteItem} onUpdateItem={handleUpdateItem} />;
       case View.HISTORY:
         return (
             <History 
@@ -196,6 +203,8 @@ const App: React.FC = () => {
                 onRetry={() => fetchHistory(user.uid)} 
                 subscriptionStatus={subscriptionStatus}
                 uid={user.uid}
+                goals={goals}
+                onDelete={handleDeleteItem}
             />
         );
       case View.PROFILE:

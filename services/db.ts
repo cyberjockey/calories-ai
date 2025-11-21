@@ -197,6 +197,18 @@ export const addFoodItemToDb = async (userId: string, item: FoodItem) => {
   }
 };
 
+export const updateFoodItemInDb = async (userId: string, item: FoodItem) => {
+  try {
+    const docRef = doc(db, USERS_COLLECTION, userId, DAILY_ENTRIES_SUBCOLLECTION, item.id);
+    await setDoc(docRef, {
+      ...item,
+      timestamp: Timestamp.fromMillis(item.timestamp)
+    }, { merge: true });
+  } catch (error) {
+    console.warn("DB Update Error (updateFoodItemInDb):", error);
+  }
+};
+
 export const deleteFoodItemFromDb = async (userId: string, itemId: string) => {
   try {
     const docRef = doc(db, USERS_COLLECTION, userId, DAILY_ENTRIES_SUBCOLLECTION, itemId);

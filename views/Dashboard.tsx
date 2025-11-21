@@ -1,16 +1,20 @@
-import React from 'react';
+
+import React, { useState } from 'react';
 import { UserGoals, FoodItem, MacroNutrients } from '../types';
 import CalorieRing from '../components/CalorieRing';
-import MacroBar from '../components/MacroBar';
 import FoodCard from '../components/FoodCard';
+import FoodDetailModal from '../components/FoodDetailModal';
 
 interface DashboardProps {
   goals: UserGoals;
   todayLog: FoodItem[];
   onDelete: (id: string) => void;
+  onUpdateItem?: (item: FoodItem) => void;
 }
 
-const Dashboard: React.FC<DashboardProps> = ({ goals, todayLog, onDelete }) => {
+const Dashboard: React.FC<DashboardProps> = ({ goals, todayLog, onDelete, onUpdateItem }) => {
+  const [selectedItem, setSelectedItem] = useState<FoodItem | null>(null);
+
   // Calculate totals
   const totals: MacroNutrients = todayLog.reduce((acc, item) => ({
     calories: acc.calories + item.calories,
@@ -62,11 +66,6 @@ const Dashboard: React.FC<DashboardProps> = ({ goals, todayLog, onDelete }) => {
         </div>
       </div>
 
-      {/* Detailed Bars (Optional but good for 'Cal AI' look) */}
-      <div className="w-full px-6 space-y-4 mb-8">
-         {/* Already visualized nicely above, skipping redundancy for cleaner UI */}
-      </div>
-
       {/* Food Log */}
       <div className="w-full px-4">
         <div className="flex justify-between items-center mb-4 px-2">
@@ -82,11 +81,26 @@ const Dashboard: React.FC<DashboardProps> = ({ goals, todayLog, onDelete }) => {
         ) : (
           <div className="space-y-2">
             {todayLog.map(item => (
-              <FoodCard key={item.id} item={item} onDelete={onDelete} />
+              <FoodCard 
+                key={item.id} 
+                item={item} 
+                onDelete={onDelete}
+                onClick={setSelectedItem}
+              />
             ))}
           </div>
         )}
       </div>
+
+      {/* Detail Modal */}
+      {selectedItem && onUpdateItem && (
+        <FoodDetailModal
+            item={selectedItem}
+            onClose={() => setSelectedItem(null)}
+            onDelete={(id) => { onDelete(id); setSelectedItem(null); }}
+            onUpdate={(updatedItem) => { onUpdateItem(updatedItem); setSelectedItem(null); }}
+        />
+      )}
     </div>
   );
 };
