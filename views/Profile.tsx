@@ -4,6 +4,7 @@ import { UserGoals, SubscriptionStatus } from '../types';
 import { LogOut, Zap, Crown, FileText } from 'lucide-react';
 import { auth } from '../firebase';
 import { signOut } from 'firebase/auth';
+import { STRIPE_PAYMENT_LINK } from '../config';
 
 interface ProfileProps {
   goals: UserGoals;
@@ -77,7 +78,7 @@ const Profile: React.FC<ProfileProps> = ({ goals, setGoals, subscriptionStatus, 
                         ></div>
                     </div>
                     <a 
-                        href={`https://buy.stripe.com/test_eVq7sL1OJ9Uvbwp45kfrW01?client_reference_id=${uid}`}
+                        href={`${STRIPE_PAYMENT_LINK}?client_reference_id=${uid}`}
                         target="_blank"
                         rel="noopener noreferrer"
                         className="block text-center w-full mt-4 py-2 bg-gradient-to-r from-purple-600 to-blue-600 rounded-xl text-white font-bold text-sm shadow-lg shadow-blue-900/20"

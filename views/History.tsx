@@ -2,6 +2,7 @@
 import React from 'react';
 import { DayLog, SubscriptionStatus } from '../types';
 import { Calendar, Loader2, RefreshCw, WifiOff, Lock, Crown } from 'lucide-react';
+import { STRIPE_PAYMENT_LINK } from '../config';
 
 interface HistoryProps {
   history: DayLog[];
@@ -26,7 +27,7 @@ const History: React.FC<HistoryProps> = ({ history, isLoading, error, onRetry, s
             </p>
             
             <a 
-                href={`https://buy.stripe.com/test_eVq7sL1OJ9Uvbwp45kfrW01?client_reference_id=${uid}`}
+                href={`${STRIPE_PAYMENT_LINK}?client_reference_id=${uid}`}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="flex items-center gap-2 bg-gradient-to-r from-purple-600 to-blue-600 text-white font-bold py-4 px-8 rounded-xl shadow-lg shadow-purple-600/20 hover:scale-105 transition-transform"

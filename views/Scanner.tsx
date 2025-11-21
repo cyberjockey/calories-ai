@@ -3,7 +3,7 @@ import React, { useState, useRef } from 'react';
 import { Camera, X, Check, Loader2, Lock } from 'lucide-react';
 import { analyzeFoodImage, analyzeFoodText, GeminiAnalysisResult, fileToGenerativePart } from '../services/geminiService';
 import { Status, FoodItem, SubscriptionStatus } from '../types';
-import { N8N_WEBHOOK_URL } from '../config';
+import { N8N_WEBHOOK_URL, STRIPE_PAYMENT_LINK } from '../config';
 
 interface ScannerProps {
   onAddItems: (items: FoodItem[]) => void;
@@ -306,7 +306,7 @@ const Scanner: React.FC<ScannerProps> = ({
        {limitReached && status === Status.IDLE && (
           <div className="p-4 bg-slate-900 border-t border-slate-800">
               <a 
-                  href={`https://buy.stripe.com/test_eVq7sL1OJ9Uvbwp45kfrW01?client_reference_id=${uid}`}
+                  href={`${STRIPE_PAYMENT_LINK}?client_reference_id=${uid}`}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="block text-center w-full py-4 rounded-xl font-bold text-lg bg-gradient-to-r from-purple-600 to-blue-600 text-white shadow-lg shadow-purple-600/20"
