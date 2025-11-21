@@ -1,5 +1,5 @@
 
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { Camera, X, Check, Loader2, Lock } from 'lucide-react';
 import { analyzeFoodImage, analyzeFoodText, GeminiAnalysisResult, fileToGenerativePart } from '../services/geminiService';
 import { Status, FoodItem, SubscriptionStatus } from '../types';
@@ -35,6 +35,10 @@ const Scanner: React.FC<ScannerProps> = ({
   const isFree = subscriptionStatus === 'free_plan';
   const limitReached = isFree && dailyUsage >= FREE_LIMIT;
 
+  useEffect(() => {
+    console.log(`[Scanner] Daily Usage: ${dailyUsage}/${FREE_LIMIT}, Limit Reached: ${limitReached}`);
+  }, [dailyUsage, limitReached]);
+
   const handleFileChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file) return;
@@ -50,7 +54,10 @@ const Scanner: React.FC<ScannerProps> = ({
   };
 
   const handleAnalyze = async () => {
-    if (limitReached) return;
+    if (limitReached) {
+        console.warn("[Scanner] Analysis blocked: Limit reached");
+        return;
+    }
     if (mode === 'PHOTO' && !imageBase64) return;
     if (mode === 'TEXT' && !textInput.trim()) return;
 
@@ -63,9 +70,15 @@ const Scanner: React.FC<ScannerProps> = ({
       } else {
         result = await analyzeFoodText(textInput);
       }
+      
+      // Critical: Set result first
       setAnalysisResult(result);
       setStatus(Status.SUCCESS);
-      onAnalysisComplete(); // Increment usage counter
+      
+      // Increment usage ONCE per successful API call (upload), regardless of items found
+      console.log("[Scanner] Analysis successful. Incrementing upload count.");
+      onAnalysisComplete(); 
+      
     } catch (error) {
       console.error(error);
       setStatus(Status.ERROR);
@@ -130,7 +143,7 @@ const Scanner: React.FC<ScannerProps> = ({
           <h2 className="text-lg font-semibold text-white">Log Food</h2>
           {isFree && (
               <span className={`text-xs ${limitReached ? 'text-red-400 font-bold' : 'text-slate-400'}`}>
-                  Free Plan: {dailyUsage}/{FREE_LIMIT} used today
+                  Free Plan: {dailyUsage}/{FREE_LIMIT} uploads today
               </span>
           )}
           {!isFree && <span className="text-xs text-green-400 font-bold">PRO Plan: Unlimited</span>}
@@ -149,7 +162,7 @@ const Scanner: React.FC<ScannerProps> = ({
               <div>
                   <h3 className="text-xl font-bold text-white">Daily Limit Reached</h3>
                   <p className="text-slate-400 text-sm mt-2 max-w-xs mx-auto">
-                      You've used your 3 free analyses for today. Upgrade to Pro for unlimited access.
+                      You've used your {FREE_LIMIT} free uploads for today. Upgrade to Pro for unlimited access.
                   </p>
               </div>
            </div>

@@ -54,8 +54,10 @@ export const getUserData = async (userId: string): Promise<{
       
       const rawCount = data.analysesToday;
       const countNumber = Number(rawCount);
+      const storedDate = typeof data.lastAnalysisDate === 'string' ? data.lastAnalysisDate.trim() : data.lastAnalysisDate;
 
-      if (data.lastAnalysisDate === today && !isNaN(countNumber)) {
+      // If date matches TODAY, OR if date is MISSING (assume manual entry/legacy), use the count.
+      if ((storedDate === today || !storedDate) && !isNaN(countNumber)) {
         dailyUsage = countNumber;
       }
 
@@ -98,12 +100,17 @@ export const subscribeToUserData = (userId: string, onUpdate: (data: {
       // Robustly handle analysesToday: cast to Number to handle strings from manual DB edits
       const rawCount = data.analysesToday;
       const countNumber = Number(rawCount);
+      
+      // Sanitize stored date string to prevent whitespace mismatch
+      const storedDate = typeof data.lastAnalysisDate === 'string' ? data.lastAnalysisDate.trim() : data.lastAnalysisDate;
 
-      if (data.lastAnalysisDate === today && !isNaN(countNumber)) {
+      // Fix: If lastAnalysisDate is missing (manual entry), we treat the existing count as valid for today
+      // to prevent "free" usage by simply deleting the date field.
+      if ((storedDate === today || !storedDate) && !isNaN(countNumber)) {
         dailyUsage = countNumber;
       } else {
-        if (data.lastAnalysisDate && data.lastAnalysisDate !== today) {
-            console.log(`[CaloriesAI] Daily usage reset. Local Date: ${today}, DB Date: ${data.lastAnalysisDate}`);
+        if (storedDate && storedDate !== today) {
+            console.log(`[CaloriesAI] Daily usage reset triggered by date mismatch. Local Date: "${today}", DB Date: "${storedDate}". UI shows 0.`);
         }
       }
 
@@ -150,12 +157,21 @@ export const incrementDailyAnalysisCount = async (userId: string) => {
                 transaction.set(docRef, { analysesToday: 1, lastAnalysisDate: today }, { merge: true });
             } else {
                 const data = sfDoc.data();
-                // Check if the date stored matches today's date
-                if (data.lastAnalysisDate === today) {
+                const storedDate = typeof data.lastAnalysisDate === 'string' ? data.lastAnalysisDate.trim() : data.lastAnalysisDate;
+                
+                // Check if the date stored matches today's date OR if date is missing (assume continuation)
+                if (storedDate === today || !storedDate) {
                     const current = Number(data.analysesToday) || 0;
-                    transaction.update(docRef, { analysesToday: current + 1 });
+                    
+                    // Requirement: Count is based on number of uploads/analyses, NOT number of items found.
+                    // Always increment by exactly 1 per successful transaction.
+                    transaction.update(docRef, { 
+                        analysesToday: current + 1, 
+                        lastAnalysisDate: today // Ensure date is set now
+                    });
                 } else {
-                    // It's a new day (or first time), reset to 1
+                    // It's a new day (or old data), reset to 1
+                    console.log(`[Transaction] Resetting daily count. Old: ${storedDate}, New: ${today}`);
                     transaction.update(docRef, { analysesToday: 1, lastAnalysisDate: today });
                 }
             }
