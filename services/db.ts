@@ -10,7 +10,8 @@ import {
   getDocs,
   Timestamp,
   increment,
-  onSnapshot
+  onSnapshot,
+  runTransaction
 } from 'firebase/firestore';
 import { FoodItem, UserGoals, SubscriptionStatus } from '../types';
 import { FIREBASE_CONFIG } from '../config';
@@ -19,7 +20,7 @@ const USERS_COLLECTION = 'users';
 const DAILY_ENTRIES_SUBCOLLECTION = 'dailyEntries';
 
 // Helper for consistent local date string YYYY-MM-DD
-const getTodayDateString = () => {
+export const getTodayDateString = () => {
   const date = new Date();
   const year = date.getFullYear();
   const month = String(date.getMonth() + 1).padStart(2, '0');
@@ -51,8 +52,11 @@ export const getUserData = async (userId: string): Promise<{
       const today = getTodayDateString();
       let dailyUsage = 0;
       
-      if (data.lastAnalysisDate === today) {
-        dailyUsage = typeof data.analysesToday === 'number' ? data.analysesToday : 0;
+      const rawCount = data.analysesToday;
+      const countNumber = Number(rawCount);
+
+      if (data.lastAnalysisDate === today && !isNaN(countNumber)) {
+        dailyUsage = countNumber;
       }
 
       return {
@@ -91,8 +95,16 @@ export const subscribeToUserData = (userId: string, onUpdate: (data: {
       const today = getTodayDateString();
       let dailyUsage = 0;
       
-      if (data.lastAnalysisDate === today) {
-        dailyUsage = typeof data.analysesToday === 'number' ? data.analysesToday : 0;
+      // Robustly handle analysesToday: cast to Number to handle strings from manual DB edits
+      const rawCount = data.analysesToday;
+      const countNumber = Number(rawCount);
+
+      if (data.lastAnalysisDate === today && !isNaN(countNumber)) {
+        dailyUsage = countNumber;
+      } else {
+        if (data.lastAnalysisDate && data.lastAnalysisDate !== today) {
+            console.log(`[CaloriesAI] Daily usage reset. Local Date: ${today}, DB Date: ${data.lastAnalysisDate}`);
+        }
       }
 
       onUpdate({
@@ -130,23 +142,26 @@ export const incrementDailyAnalysisCount = async (userId: string) => {
         const today = getTodayDateString();
         const docRef = doc(db, USERS_COLLECTION, userId);
         
-        const docSnap = await getDoc(docRef);
-        
-        if (docSnap.exists()) {
-            const data = docSnap.data();
-            if (data.lastAnalysisDate === today) {
-                // Same day, just increment
-                await setDoc(docRef, { analysesToday: increment(1) }, { merge: true });
+        await runTransaction(db, async (transaction) => {
+            const sfDoc = await transaction.get(docRef);
+            
+            if (!sfDoc.exists()) {
+                // Initialize if doesn't exist
+                transaction.set(docRef, { analysesToday: 1, lastAnalysisDate: today }, { merge: true });
             } else {
-                // New day, reset to 1 and update date
-                await setDoc(docRef, { analysesToday: 1, lastAnalysisDate: today }, { merge: true });
+                const data = sfDoc.data();
+                // Check if the date stored matches today's date
+                if (data.lastAnalysisDate === today) {
+                    const current = Number(data.analysesToday) || 0;
+                    transaction.update(docRef, { analysesToday: current + 1 });
+                } else {
+                    // It's a new day (or first time), reset to 1
+                    transaction.update(docRef, { analysesToday: 1, lastAnalysisDate: today });
+                }
             }
-        } else {
-            // Initialize doc
-            await setDoc(docRef, { analysesToday: 1, lastAnalysisDate: today }, { merge: true });
-        }
+        });
     } catch (error) {
-         console.warn("DB Write Error (incrementDailyAnalysisCount):", error);
+         console.warn("DB Transaction Error (incrementDailyAnalysisCount):", error);
     }
 }
 
